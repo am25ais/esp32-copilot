@@ -27,6 +27,10 @@
         "title": "ESP32: Serial Monitor"
       },
       {
+        "command": "esp32-copilot.stopMonitor",
+        "title": "ESP32: Stop Serial Monitor"
+      },
+      {
         "command": "esp32-copilot.askAI",
         "title": "ESP32: Ask AI"
       },
