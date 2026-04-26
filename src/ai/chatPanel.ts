@@ -46,15 +46,26 @@ export class ChatPanel {
 					}
 
 					try {
+						const sketch = await this.readSketchContext();
+						const userContent = sketch
+							? `Here is my current sketch (test-sketch.ino):\n\n\`\`\`cpp\n${sketch}\n\`\`\`\n\n${msg.text}`
+							: msg.text;
+
 						const client = new Anthropic({ apiKey });
-						const response = await client.messages.create({
+						const stream = client.messages.stream({
 							model: 'claude-sonnet-4-5',
 							max_tokens: 1024,
-							messages: [{ role: 'user', content: msg.text }],
+							system:
+								'You are an expert ESP32 embedded systems engineer helping a developer with their Arduino sketch. Be concise, accurate about ESP32-specific behavior (GPIO strapping pins, dual-core scheduling, WiFi/BLE coexistence, voltage levels), and give working code examples when relevant.',
+							messages: [{ role: 'user', content: userContent }],
 						});
-						const block = response.content[0];
-						const text = block.type === 'text' ? block.text : '(non-text response)';
-						this.panel.webview.postMessage({ type: 'reply', id: msg.id, text });
+
+						stream.on('text', (chunk: string) => {
+							this.panel.webview.postMessage({ type: 'chunk', id: msg.id, text: chunk });
+						});
+
+						await stream.finalMessage();
+						this.panel.webview.postMessage({ type: 'done', id: msg.id });
 					} catch (err) {
 						console.error('ESP32 Copilot: Anthropic API error', err);
 						this.panel.webview.postMessage({
@@ -79,6 +90,15 @@ export class ChatPanel {
 				d.dispose();
 			}
 		}
+	}
+
+	private async readSketchContext(): Promise<string | null> {
+		const matches = await vscode.workspace.findFiles('**/*.ino', null, 1);
+		if (matches.length === 0) {
+			return null;
+		}
+		const data = await vscode.workspace.fs.readFile(matches[0]);
+		return Buffer.from(data).toString('utf-8');
 	}
 
 	private getHtml(): string {
@@ -133,6 +153,10 @@ export class ChatPanel {
 		align-self: flex-start;
 		background: var(--vscode-input-background);
 		color: var(--vscode-input-foreground);
+	}
+	.bubble.assistant.streaming:empty::after {
+		content: '...';
+		opacity: 0.6;
 	}
 	#input-row {
 		display: flex;
@@ -207,7 +231,8 @@ export class ChatPanel {
 		const id = nextId++;
 		appendBubble('user', value);
 		promptEl.value = '';
-		appendBubble('assistant', '...', id);
+		const bubble = appendBubble('assistant', '', id);
+		bubble.classList.add('streaming');
 		vscode.postMessage({ type: 'ask', id, text: value });
 	}
 
@@ -221,12 +246,24 @@ export class ChatPanel {
 
 	window.addEventListener('message', (event) => {
 		const data = event.data;
-		if (data && data.type === 'reply') {
-			const target = messagesEl.querySelector('.bubble.assistant[data-id="' + data.id + '"]');
-			if (target) {
-				target.textContent = data.text;
-				scrollToBottom();
-			}
+		if (!data) {
+			return;
+		}
+		const target = messagesEl.querySelector('.bubble.assistant[data-id="' + data.id + '"]');
+		if (!target) {
+			return;
+		}
+		if (data.type === 'chunk') {
+			target.classList.remove('streaming');
+			target.textContent = (target.textContent || '') + data.text;
+			scrollToBottom();
+		} else if (data.type === 'done') {
+			target.classList.remove('streaming');
+			scrollToBottom();
+		} else if (data.type === 'reply') {
+			target.classList.remove('streaming');
+			target.textContent = data.text;
+			scrollToBottom();
 		}
 	});
 </script>
