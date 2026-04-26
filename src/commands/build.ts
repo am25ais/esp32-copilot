@@ -1,16 +1,7 @@
 import * as vscode from 'vscode';
 import { spawn } from 'child_process';
 import * as path from 'path';
-
-let outputChannel: vscode.OutputChannel | undefined;
-
-function getOutputChannel(context: vscode.ExtensionContext): vscode.OutputChannel {
-	if (!outputChannel) {
-		outputChannel = vscode.window.createOutputChannel('ESP32 Copilot');
-		context.subscriptions.push(outputChannel);
-	}
-	return outputChannel;
-}
+import { getOutputChannel } from '../output';
 
 export async function buildCommand(context: vscode.ExtensionContext): Promise<void> {
 	const workspaceFolders = vscode.workspace.workspaceFolders;

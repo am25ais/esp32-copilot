@@ -3,15 +3,14 @@ import { ActionsProvider } from './ui/actionsProvider';
 import { buildCommand } from './commands/build';
 import { setApiKey, clearApiKey } from './ai/apiKey';
 import { ChatPanel } from './ai/chatPanel';
+import { flashCommand } from './commands/flash';
 
 export function activate(context: vscode.ExtensionContext) {
 	console.log('ESP32 Copilot is now active');
 
 	context.subscriptions.push(
 		vscode.commands.registerCommand('esp32-copilot.build', () => buildCommand(context)),
-		vscode.commands.registerCommand('esp32-copilot.flash', () => {
-			vscode.window.showInformationMessage('ESP32 Copilot: Flash clicked!');
-		}),
+		vscode.commands.registerCommand('esp32-copilot.flash', () => flashCommand(context)),
 		vscode.commands.registerCommand('esp32-copilot.monitor', () => {
 			vscode.window.showInformationMessage('ESP32 Copilot: Monitor clicked!');
 		}),
