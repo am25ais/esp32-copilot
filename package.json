@@ -41,8 +41,22 @@
       {
         "command": "esp32-copilot.clearApiKey",
         "title": "ESP32: Clear API Key"
+      },
+      {
+        "command": "esp32-copilot.selectBoard",
+        "title": "ESP32: Select Board"
       }
     ],
+    "configuration": {
+      "title": "ESP32 Copilot",
+      "properties": {
+        "esp32-copilot.fqbn": {
+          "type": "string",
+          "default": "esp32:esp32:esp32",
+          "description": "Fully Qualified Board Name (FQBN) for the target ESP32 board. Use 'ESP32: Select Board' to change this interactively."
+        }
+      }
+    },
     "viewsContainers": {
       "activitybar": [
         {

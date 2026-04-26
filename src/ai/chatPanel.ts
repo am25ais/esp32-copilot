@@ -77,7 +77,7 @@ export class ChatPanel {
 							model: 'claude-sonnet-4-5',
 							max_tokens: 1024,
 							system:
-								'You are an expert ESP32 embedded systems engineer helping a developer with their Arduino sketch. Be concise, accurate about ESP32-specific behavior (GPIO strapping pins, dual-core scheduling, WiFi/BLE coexistence, voltage levels), and give working code examples when relevant.',
+								'You are an expert ESP32 embedded systems engineer helping a developer with their Arduino sketch. The user\'s sketch may be attached as context — only reference it when they ask code-related questions. For greetings, vague messages, or general questions, respond naturally and concisely without volunteering code analysis. Be accurate about ESP32-specific behavior (GPIO strapping pins, dual-core scheduling, WiFi/BLE coexistence, voltage levels). Give working code examples only when the user clearly wants code. Keep responses focused and proportional to the question — don\'t pad short answers with extra suggestions or follow-up prompts unless the user asks.',
 							messages: this.messages,
 						});
 

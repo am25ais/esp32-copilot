@@ -5,6 +5,7 @@ import { setApiKey, clearApiKey } from './ai/apiKey';
 import { ChatPanel } from './ai/chatPanel';
 import { flashCommand } from './commands/flash';
 import { monitorCommand, stopMonitorCommand } from './commands/monitor';
+import { selectBoardCommand } from './commands/selectBoard';
 
 export function activate(context: vscode.ExtensionContext) {
 	console.log('ESP32 Copilot is now active');
@@ -17,6 +18,7 @@ export function activate(context: vscode.ExtensionContext) {
 		vscode.commands.registerCommand('esp32-copilot.askAI', () => ChatPanel.createOrShow(context)),
 		vscode.commands.registerCommand('esp32-copilot.setApiKey', () => setApiKey(context)),
 		vscode.commands.registerCommand('esp32-copilot.clearApiKey', () => clearApiKey(context)),
+		vscode.commands.registerCommand('esp32-copilot.selectBoard', () => selectBoardCommand(context)),
 		vscode.window.createTreeView('esp32-copilot.actionsView', {
 			treeDataProvider: new ActionsProvider(),
 		}),

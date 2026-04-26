@@ -27,7 +27,9 @@ export async function flashCommand(context: vscode.ExtensionContext): Promise<vo
 		return;
 	}
 
-	const fqbn = 'esp32:esp32:esp32';
+	const fqbn =
+		vscode.workspace.getConfiguration('esp32-copilot').get<string>('fqbn') ||
+		'esp32:esp32:esp32';
 	channel.appendLine(
 		`$ arduino-cli upload --fqbn ${fqbn} --port ${portAddress} ${sketchFolderPath}`,
 	);

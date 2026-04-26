@@ -21,7 +21,9 @@ export async function buildCommand(context: vscode.ExtensionContext): Promise<vo
 	const channel = getOutputChannel(context);
 	channel.show(true);
 
-	const fqbn = 'esp32:esp32:esp32';
+	const fqbn =
+		vscode.workspace.getConfiguration('esp32-copilot').get<string>('fqbn') ||
+		'esp32:esp32:esp32';
 	channel.appendLine(`$ arduino-cli compile --fqbn ${fqbn} ${sketchFolderPath}`);
 
 	const proc = spawn('arduino-cli', ['compile', '--fqbn', fqbn, sketchFolderPath]);
