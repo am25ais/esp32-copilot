@@ -8,6 +8,7 @@ export class ChatPanel {
 	private readonly panel: vscode.WebviewPanel;
 	private readonly context: vscode.ExtensionContext;
 	private disposables: vscode.Disposable[] = [];
+	private messages: Array<{ role: 'user' | 'assistant'; content: string }> = [];
 
 	static createOrShow(context: vscode.ExtensionContext): void {
 		if (ChatPanel.current) {
@@ -34,6 +35,20 @@ export class ChatPanel {
 
 		this.panel.webview.onDidReceiveMessage(
 			async (msg) => {
+				if (msg.type === 'clear') {
+					const choice = await vscode.window.showWarningMessage(
+						'Clear conversation history?',
+						{ modal: true },
+						'Clear',
+						'Cancel',
+					);
+					if (choice === 'Clear') {
+						this.messages = [];
+						this.panel.webview.postMessage({ type: 'cleared' });
+					}
+					return;
+				}
+
 				if (msg.type === 'ask') {
 					const apiKey = await getApiKey(this.context);
 					if (!apiKey) {
@@ -46,10 +61,16 @@ export class ChatPanel {
 					}
 
 					try {
-						const sketch = await this.readSketchContext();
-						const userContent = sketch
-							? `Here is my current sketch (test-sketch.ino):\n\n\`\`\`cpp\n${sketch}\n\`\`\`\n\n${msg.text}`
-							: msg.text;
+						let userContent: string;
+						if (this.messages.length === 0) {
+							const sketch = await this.readSketchContext();
+							userContent = sketch
+								? `Here is my current sketch (test-sketch.ino):\n\n\`\`\`cpp\n${sketch}\n\`\`\`\n\n${msg.text}`
+								: msg.text;
+						} else {
+							userContent = msg.text;
+						}
+						this.messages.push({ role: 'user', content: userContent });
 
 						const client = new Anthropic({ apiKey });
 						const stream = client.messages.stream({
@@ -57,17 +78,26 @@ export class ChatPanel {
 							max_tokens: 1024,
 							system:
 								'You are an expert ESP32 embedded systems engineer helping a developer with their Arduino sketch. Be concise, accurate about ESP32-specific behavior (GPIO strapping pins, dual-core scheduling, WiFi/BLE coexistence, voltage levels), and give working code examples when relevant.',
-							messages: [{ role: 'user', content: userContent }],
+							messages: this.messages,
 						});
 
+						let assistantText = '';
 						stream.on('text', (chunk: string) => {
+							assistantText += chunk;
 							this.panel.webview.postMessage({ type: 'chunk', id: msg.id, text: chunk });
 						});
 
 						await stream.finalMessage();
+						this.messages.push({ role: 'assistant', content: assistantText });
 						this.panel.webview.postMessage({ type: 'done', id: msg.id });
 					} catch (err) {
 						console.error('ESP32 Copilot: Anthropic API error', err);
+						if (
+							this.messages.length > 0 &&
+							this.messages[this.messages.length - 1].role === 'user'
+						) {
+							this.messages.pop();
+						}
 						this.panel.webview.postMessage({
 							type: 'reply',
 							id: msg.id,
@@ -189,6 +219,20 @@ export class ChatPanel {
 	#send:hover {
 		background: var(--vscode-button-hoverBackground);
 	}
+	#clear {
+		padding: 0 10px;
+		background: var(--vscode-button-secondaryBackground, transparent);
+		color: var(--vscode-button-secondaryForeground, var(--vscode-editor-foreground));
+		border: 1px solid var(--vscode-panel-border);
+		border-radius: 4px;
+		cursor: pointer;
+		opacity: 0.75;
+		font-size: 0.9em;
+	}
+	#clear:hover {
+		opacity: 1;
+		background: var(--vscode-button-secondaryHoverBackground, var(--vscode-input-background));
+	}
 </style>
 </head>
 <body>
@@ -196,6 +240,7 @@ export class ChatPanel {
 	<div id="messages"></div>
 	<div id="input-row">
 		<textarea id="prompt" rows="2" placeholder="Ask about ESP32..."></textarea>
+		<button id="clear" title="Clear conversation history">Clear</button>
 		<button id="send">Send</button>
 	</div>
 </div>
@@ -204,6 +249,7 @@ export class ChatPanel {
 	const messagesEl = document.getElementById('messages');
 	const promptEl = document.getElementById('prompt');
 	const sendEl = document.getElementById('send');
+	const clearEl = document.getElementById('clear');
 
 	let nextId = 1;
 
@@ -237,6 +283,9 @@ export class ChatPanel {
 	}
 
 	sendEl.addEventListener('click', send);
+	clearEl.addEventListener('click', () => {
+		vscode.postMessage({ type: 'clear' });
+	});
 	promptEl.addEventListener('keydown', (e) => {
 		if (e.key === 'Enter' && !e.shiftKey) {
 			e.preventDefault();
@@ -247,6 +296,10 @@ export class ChatPanel {
 	window.addEventListener('message', (event) => {
 		const data = event.data;
 		if (!data) {
+			return;
+		}
+		if (data.type === 'cleared') {
+			messagesEl.innerHTML = '';
 			return;
 		}
 		const target = messagesEl.querySelector('.bubble.assistant[data-id="' + data.id + '"]');
