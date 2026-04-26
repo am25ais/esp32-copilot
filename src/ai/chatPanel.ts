@@ -1,0 +1,236 @@
+import * as vscode from 'vscode';
+import Anthropic from '@anthropic-ai/sdk';
+import { getApiKey } from './apiKey';
+
+export class ChatPanel {
+	private static current: ChatPanel | undefined;
+
+	private readonly panel: vscode.WebviewPanel;
+	private readonly context: vscode.ExtensionContext;
+	private disposables: vscode.Disposable[] = [];
+
+	static createOrShow(context: vscode.ExtensionContext): void {
+		if (ChatPanel.current) {
+			ChatPanel.current.panel.reveal(vscode.ViewColumn.Beside);
+			return;
+		}
+
+		const panel = vscode.window.createWebviewPanel(
+			'esp32-copilot.chat',
+			'ESP32 Copilot — Ask AI',
+			vscode.ViewColumn.Beside,
+			{ enableScripts: true, retainContextWhenHidden: true },
+		);
+
+		ChatPanel.current = new ChatPanel(panel, context);
+	}
+
+	private constructor(panel: vscode.WebviewPanel, context: vscode.ExtensionContext) {
+		this.panel = panel;
+		this.context = context;
+		this.panel.webview.html = this.getHtml();
+
+		this.panel.onDidDispose(() => this.dispose(), null, this.disposables);
+
+		this.panel.webview.onDidReceiveMessage(
+			async (msg) => {
+				if (msg.type === 'ask') {
+					const apiKey = await getApiKey(this.context);
+					if (!apiKey) {
+						this.panel.webview.postMessage({
+							type: 'reply',
+							id: msg.id,
+							text: 'No API key set. Run "ESP32: Set API Key" from the command palette.',
+						});
+						return;
+					}
+
+					try {
+						const client = new Anthropic({ apiKey });
+						const response = await client.messages.create({
+							model: 'claude-sonnet-4-5',
+							max_tokens: 1024,
+							messages: [{ role: 'user', content: msg.text }],
+						});
+						const block = response.content[0];
+						const text = block.type === 'text' ? block.text : '(non-text response)';
+						this.panel.webview.postMessage({ type: 'reply', id: msg.id, text });
+					} catch (err) {
+						console.error('ESP32 Copilot: Anthropic API error', err);
+						this.panel.webview.postMessage({
+							type: 'reply',
+							id: msg.id,
+							text: 'Error: ' + (err instanceof Error ? err.message : String(err)),
+						});
+					}
+				}
+			},
+			null,
+			this.disposables,
+		);
+	}
+
+	private dispose(): void {
+		ChatPanel.current = undefined;
+		this.panel.dispose();
+		while (this.disposables.length) {
+			const d = this.disposables.pop();
+			if (d) {
+				d.dispose();
+			}
+		}
+	}
+
+	private getHtml(): string {
+		return /* html */ `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ESP32 Copilot — Ask AI</title>
+<style>
+	html, body {
+		height: 100%;
+		margin: 0;
+		padding: 0;
+		background: var(--vscode-editor-background);
+		color: var(--vscode-editor-foreground);
+		font-family: var(--vscode-font-family);
+		font-size: var(--vscode-font-size);
+	}
+	#root {
+		display: flex;
+		flex-direction: column;
+		height: 100vh;
+		width: 100vw;
+		box-sizing: border-box;
+	}
+	#messages {
+		flex: 1;
+		overflow-y: auto;
+		padding: 12px;
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+	}
+	.bubble {
+		max-width: 90%;
+		padding: 8px 12px;
+		border-radius: 6px;
+		white-space: pre-wrap;
+		word-wrap: break-word;
+		font-family: var(--vscode-editor-font-family, monospace);
+		font-size: var(--vscode-editor-font-size, 13px);
+		line-height: 1.4;
+		border: 1px solid var(--vscode-panel-border);
+	}
+	.bubble.user {
+		align-self: flex-end;
+		background: var(--vscode-button-background);
+		color: var(--vscode-button-foreground);
+	}
+	.bubble.assistant {
+		align-self: flex-start;
+		background: var(--vscode-input-background);
+		color: var(--vscode-input-foreground);
+	}
+	#input-row {
+		display: flex;
+		gap: 8px;
+		padding: 8px;
+		border-top: 1px solid var(--vscode-panel-border);
+		background: var(--vscode-editor-background);
+	}
+	#prompt {
+		flex: 1;
+		resize: none;
+		min-height: 36px;
+		max-height: 160px;
+		padding: 6px 8px;
+		background: var(--vscode-input-background);
+		color: var(--vscode-input-foreground);
+		border: 1px solid var(--vscode-panel-border);
+		border-radius: 4px;
+		font-family: var(--vscode-editor-font-family, monospace);
+		font-size: var(--vscode-editor-font-size, 13px);
+	}
+	#send {
+		padding: 0 14px;
+		background: var(--vscode-button-background);
+		color: var(--vscode-button-foreground);
+		border: none;
+		border-radius: 4px;
+		cursor: pointer;
+	}
+	#send:hover {
+		background: var(--vscode-button-hoverBackground);
+	}
+</style>
+</head>
+<body>
+<div id="root">
+	<div id="messages"></div>
+	<div id="input-row">
+		<textarea id="prompt" rows="2" placeholder="Ask about ESP32..."></textarea>
+		<button id="send">Send</button>
+	</div>
+</div>
+<script>
+	const vscode = acquireVsCodeApi();
+	const messagesEl = document.getElementById('messages');
+	const promptEl = document.getElementById('prompt');
+	const sendEl = document.getElementById('send');
+
+	let nextId = 1;
+
+	function scrollToBottom() {
+		messagesEl.scrollTop = messagesEl.scrollHeight;
+	}
+
+	function appendBubble(role, text, dataId) {
+		const el = document.createElement('div');
+		el.className = 'bubble ' + role;
+		el.textContent = text;
+		if (dataId !== undefined) {
+			el.setAttribute('data-id', String(dataId));
+		}
+		messagesEl.appendChild(el);
+		scrollToBottom();
+		return el;
+	}
+
+	function send() {
+		const value = promptEl.value.trim();
+		if (!value) {
+			return;
+		}
+		const id = nextId++;
+		appendBubble('user', value);
+		promptEl.value = '';
+		appendBubble('assistant', '...', id);
+		vscode.postMessage({ type: 'ask', id, text: value });
+	}
+
+	sendEl.addEventListener('click', send);
+	promptEl.addEventListener('keydown', (e) => {
+		if (e.key === 'Enter' && !e.shiftKey) {
+			e.preventDefault();
+			send();
+		}
+	});
+
+	window.addEventListener('message', (event) => {
+		const data = event.data;
+		if (data && data.type === 'reply') {
+			const target = messagesEl.querySelector('.bubble.assistant[data-id="' + data.id + '"]');
+			if (target) {
+				target.textContent = data.text;
+				scrollToBottom();
+			}
+		}
+	});
+</script>
+</body>
+</html>`;
+	}
+}
