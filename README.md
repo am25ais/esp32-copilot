@@ -1,6 +1,9 @@
 # ESP32 Copilot
 
 > AI-assisted ESP32 development for Visual Studio Code — build, flash, monitor, and ask Claude about your code, all from a single sidebar.
+<img width="959" height="502" alt="Screenshot 2026-05-07 190618" src="https://github.com/user-attachments/assets/cb994c0f-6fb8-49e9-a332-c9e711214b09" />
+
+
 
 ESP32 Copilot brings the things you actually do during ESP32 development into VS Code. Compile your sketch with arduino-cli, flash it to your board, watch the serial monitor — and when you get stuck, ask Claude a question. Claude can read your sketch, knows ESP32-specific quirks (strapping pins, dual-core scheduling, WiFi/BLE coexistence), and gives concrete answers about your code.
 
